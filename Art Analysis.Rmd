@@ -1,0 +1,469 @@
+---
+title: "Bachelor Thesis Analysis"
+author: "Pernille Berg Lassen"
+date: "25 sep 2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+Steps:
+1) Data cleaning
+2) Qualitity checks of the eye-tracking data
+2.a) Looking at my population (behavioral data)
+  Mean age
+  The art-interest scores (q8+q9+q10+q11)
+  Familiarity (q7) - how familiar were the artworks to the population?
+3) Vizualitions (Both behavioral and eye-tracking data)
+  Behavioral: Bar plots
+  ET: Heat maps and scan paths (see port 1 4th sem)
+4) Models
+  Behavioral: lmer
+    a. calculating mean score of rating (q1+q2+q3/3) and understanding (q4+q5+q6/3) for each image
+  ET: lmer
+5) Saliency algoritm
+  ET: looking at the effect of saliency 
+  ROC and AUC
+6) CV of models
+
+
+```{r}
+library(pacman)
+p_load(ggplot2,dplyr,stringr,tidyverse,data.table,knitr,lime,caret)
+library(lmerTest)
+
+#Cleaning the rating + art interest data - looking at the population
+temp = list.files(path = "C:/Users/Ejer/Desktop/Bachelor/Experiment/data", pattern = "*.csv", full.names = T)
+myfiles = lapply(temp,read.delim,sep=",",header = T)
+Rating_df=rbindlist(myfiles, fill = T)
+
+temp = list.files(path = "C:/Users/Ejer/Desktop/Bachelor/Experiment/data/questionaire", pattern = "*.csv", full.names = T)
+myfiles = lapply(temp,read.delim,sep=",",header = T)
+ArtInt_df=rbindlist(myfiles, fill = T)
+
+#Binding them together
+temp = select(ArtInt_df,ID,q8,q9,q10,q11)
+temp_df = subset(Rating_df,select=-c(X,q8,q9,q10,q11))
+df = merge(temp_df, temp, all = T)
+df = plyr::rename(df,c("condition" = "group")) 
+#A column which only contains info about whether or not the participant recieived a briefing or not, O = no briefing, 1 = briefing
+df$condition = str_extract(df$group, "\\d")
+
+
+df2 <- df %>%
+  group_by(ID) %>%
+  summarize(
+    q1 = q1[1],
+    q2 = q2[1],
+    q3 = q3[1],
+    q4 = q4[1],
+    q5 = q5[1],
+    q6 = q6[1],
+    q7 = q7[1],
+    q8 = q8[1],
+    q9 = q9[1],
+    q10 = q10[1],
+    condition = condition[1]
+  )
+
+plot1 <- ggplot(df2,aes(y=q1,x=condition))+geom_boxplot()+ggtitle("Would you go to a museum to see this picture?")
+plot2 <- ggplot(df2,aes(y=q2,x=condition))+geom_boxplot()+ggtitle("Would you recommend others to do the same?")
+plot3 <- ggplot(df2,aes(y=q3,x=condition))+geom_boxplot()+ggtitle("Would you buy this picture?")
+plot4 <- ggplot(df2,aes(y=q4,x=condition))+geom_boxplot()+ggtitle("Would you be able to explain the main idea?")
+plot5 <- ggplot(df2,aes(y=q5,x=condition))+geom_boxplot()+ggtitle("Would you be able to identify other artworks by same artist? ")
+plot6 <- ggplot(df2,aes(y=q6,x=condition))+geom_boxplot()+ggtitle("Would you be able to explain the main idea behind artworks like this?")
+
+library(ggpubr)
+ggarrange(
+  plot1,
+  plot2,
+  plot3, 
+  plot4,
+  plot5,
+  plot6
+)
+
+
+plot7 <- ggplot(df2,aes(x=q7))+geom_bar()+ggtitle("Seen before?")+facet_wrap(~condition)
+plot8 <- ggplot(df2,aes(y=q8,x=condition))+geom_boxplot()+ggtitle("Interested in art?")
+plot9 <- ggplot(df2,aes(y=q9,x=condition))+geom_boxplot()+ggtitle("Museum?")
+plot10 <- ggplot(df2,aes(y=q10,x=condition))+geom_boxplot()+ggtitle("Read about art?")
+
+ggarrange(
+  plot7,
+  plot8,
+  plot9,
+  plot10
+)
+
+df$q1 = as.numeric(df$q1)
+df$q2 = as.numeric(df$q2)
+df$q3 = as.numeric(df$q3)
+df$q4 = as.numeric(df$q4)
+df$q5 = as.numeric(df$q5)
+df$q6 = as.numeric(df$q6)
+df$q8 = as.numeric(df$q8)
+df$q9 = as.numeric(df$q9)
+df$q10 = as.numeric(df$q10)
+
+#Looking at the population:
+mean(df$age)
+summary(df$gender)/40 #The reason female is not a whole number - ID 1 saw only 39 images
+summary(df$q7)/21 #On average, each participants has seen 1.9 image out of 40 - (it's divided by the number of participants)
+summary(df$image[df$q7 == "yes"]) #Most familiar images - so far it's schiele
+length(df$ID[df$q11 == "yes"])/40 #How many people have taken art-classes? - again, not a whole number because of ID 1
+
+Art_interest_df = subset(df, select = c(ID,q8,q9,q10))
+Art_interest_df$Art_IntScore = (Art_interest_df$q8+Art_interest_df$q9+Art_interest_df$q10)/3
+Art_interest_df = aggregate(Art_interest_df,list(Art_interest_df$ID),mean)
+Art_interest_df = subset(Art_interest_df, select = -c(Group.1))
+mean(Art_interest_df$Art_IntScore) #How interested are people in general in art?
+
+#Are the group well-balanced?
+#Getting the mean for rating (understanding and rating) for each image - Basically just looking at condition means
+App_1 = subset(df, condition == 1)
+App_1 = subset(App_1,select=c(image,q1,q2,q3))
+App_1=aggregate(App_1, list(App_1$image),mean)
+App_1$TotalScore_liking = (App_1$q1 + App_1$q2 + App_1$q3)/3
+App_1 = subset(App_1, select = -c(image))
+App_1 = plyr::rename(App_1,c("Group.1" = "image"))
+App_1$condition = 1
+App_1 = subset(App_1, select = -c(q1,q2,q3))
+mean(App_1$TotalScore_liking)
+
+App_0 = subset(df, condition == 0)
+App_0 = subset(App_0,select=c(image,q1,q2,q3))
+App_0 = aggregate(App_0, list(App_0$image),mean)
+App_0$TotalScore_liking = (App_0$q1 + App_0$q2 + App_0$q3)/3
+App_0 = subset(App_0, select = -c(image))
+App_0 = plyr::rename(App_0,c("Group.1" = "image"))
+App_0$condition = 0
+App_0 = subset(App_0, select = -c(q1,q2,q3))
+mean(App_0$TotalScore_liking)
+
+App_df = rbind(App_1,App_0)
+App_df$genre = str_extract(App_df,"")
+App_df$artst = str_extract()
+
+Und_1 = subset(df, condition == 1)
+Und_1 = subset(Und_1, select = c(image, q4,q5,q6))
+Und_1 = aggregate(Und_1,list(Und_1$image),mean)
+Und_1$TotalScore_Understand = (Und_1$q4 + Und_1$q5 + Und_1$q6)/3
+Und_1 = subset(Und_1, select = -c(image))
+Und_1 = plyr::rename(Und_1, c("Group.1" = "image"))
+Und_1$condition = 1
+Und_1 = subset(Und_1, select = -c(q4,q5,q6))
+mean(Und_1$TotalScore_Understand)
+
+Und_0 = subset(df, condition == 0)
+Und_0 = subset(Und_0, select = c(image, q4,q5,q6))
+Und_0 = aggregate(Und_0,list(Und_0$image),mean)
+Und_0$TotalScore_Understand = (Und_0$q4 + Und_0$q5 + Und_0$q6)/3
+Und_0 = subset(Und_0, select = -c(image))
+Und_0 = plyr::rename(Und_0, c("Group.1" = "image"))
+Und_0$condition = 0
+Und_0 = subset(Und_0, select = -c(q4,q5,q6))
+mean(Und_0$TotalScore_Understand)
+
+Und_df = rbind(Und_1,Und_0)
+Und_df$artist = str_extract(Und_df$image, "images\\w+")
+Und_df$artist = gsub("\\images_","",Und_df$artist)
+
+
+Und_df$genre = gsub("\\images_","",Und_df$image)
+Und_df$genre =gsub("","",Und_df$artist)
+```
+
+
+
+```{r}
+#Rating models - can condition explain ratings?
+m1 = lmerTest::lmer(TotalScore_Understand ~ 1 + condition + (1|image),Und_df)
+m2 = lmerTest::lmer(TotalScore_liking ~ 1 + condtion + (1|image),App_df)
+
+#Adding category, gender, the art interest - looking at the predictors
+
+
+
+
+```
+
+install itrackR
+
+
+#Stuff from Kenneth K and I (ET assignment 4th sem)
+#set WD and load packages
+library(pacman)
+p_load(data.table, lmerTest, dplyr, groupdata2, stringr, MuMIn, cvms, ggplot2, jpeg, grid)
+#opening multiple log files in one df
+folder = "/Users/kennethenevoldsen/Desktop/Github/Statistic R/Assignments/EyeTracking/EyeTracking/Eye tracking data/PupilsLogs/"
+fileList = list.files(path=folder, pattern="*.csv")
+temp = lapply(fileList, function(x) read.delim(paste(folder,x, sep = ""), sep = ","))
+pup_logs = rbindlist(temp, fill = T)
+pup_logs$X = pup_logs$X + 1 #add one due to the data being from python
+#define er function to clean the data (to decrease clutter)
+clean_df = function(df){
+  #merge witl the pupil logs
+  df = merge(df, pup_logs, by.x = c("ParticipantID", "Trial"), by.y = c("subject", "X"), all = T) 
+  
+  #add direction
+  df$Direction[grepl("dir", df$video)] = "directed"
+  df$Direction[grepl("div", df$video)] = "divergent"
+  
+  #add Ostensive 
+  df$Ostensive[grepl("+o", df$video)] = 1
+  df$Ostensive[grepl("-o", df$video)] = 0
+  
+  #add column called SearchType
+  df = df %>% mutate(SearchType = ifelse(SearchOrder==1 & Trial<=5, 'star', 
+                         ifelse(SearchOrder==2 & Trial<=5, 'count',
+                                ifelse(SearchOrder==1 & Trial>=6, 'count',
+                                       ifelse(SearchOrder==2 & Trial>=6, 'star', NA))))
+  )
+}
+df_fix1 = clean_df(df_fix)
+df_sac1 = clean_df(df_sac)
+df_sample1 = clean_df(df_sample)
+df_sac1$SearchType = as.factor(df_sac1$SearchType)
+### social engagement
+se_df <- subset(df_fix1, Task == "SocialEngagement")
+se_df$Direction <- as.factor(se_df$Direction)  ; se_df$Ostensive <- as.factor(se_df$Ostensive)
+se_df = droplevels(se_df)
+length(unique(se_df$ParticipantID))
+m1 = glmer(PupilSize ~ 1 + Ostensive*Direction*Trial + (1 + Ostensive*Direction*Trial|ParticipantID), se_df, family = gaussian(link = "log"), 
+                control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+summary(m1)
+  #Defing a function to get performance
+getPerformance = function(test_df, train_df, mdl, mdl_string, n = NA){
+  #asses performance and returns a result df
+  
+    #save perf to list
+      #Test performance
+  
+  #extract predicted value from the mdl string to use in the rmse
+  temp_string = gsub("(\\~).+", mdl_string, replacement = "")
+  actual_col = gsub(" ", x = temp_string, replacement = "")
+  actual =pull(dplyr::select(test_df, actual_col))
+  #calculating rmse
+  rmse = hydroGOF::rmse(predict(mdl, test_df, allow.new.levels = T), actual , na.rm = T)
+  mdlPerf = summary(mdl)
+    #saving performance metrix to a df
+  result_df =  data.frame(rmse = rmse,
+                          AIC = mdlPerf$AICtab[1],
+                          BIC = mdlPerf$AICtab[2],
+                          LogLik = mdlPerf$AICtab[3],
+                          n = n) 
+  return(result_df)
+} #Getting performance
+  #defining a cross validate function
+CrossVal = function(num_folds, dataset, mdl_string, ID_col = NULL, CAT_col = NULL, glmer = T, link = "log") {
+  
+  #folding the dataset
+  dataset = fold(dataset, num_folds, cat_col = CAT_col, id_col = ID_col, method = 'n_dist')
+  
+  #looping through the folds
+  for (fold in seq(num_folds)) {
+    train_df = subset(dataset, .folds != fold)
+    test_df = subset(dataset, .folds == fold)
+    
+    if (glmer == T){
+      if (link == "log"){
+        #train data on all except the fold
+        mdl = try(glmer(mdl_string, train_df, family = gaussian(link = "log"), 
+                        control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE)))
+      } else {
+        #train data on all except the fold
+        mdl = try(glmer(mdl_string, train_df, family = gaussian, 
+                        control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE)))
+      }
+    } else {
+      mdl = try(glm(mdl_string, train_df, family = gaussian(link = "log")))
+    }
+    temp_sum = try(summary(mdl))
+    if (length(temp_sum) > 3){ #if you could make a model
+      #asses performance and append it to a df
+      temp = getPerformance(test_df, train_df, mdl, mdl_string, n = fold)
+    } else {#if you couldn't make a model
+      temp = data.frame(rmse = NA,
+                        AIC = NA,
+                        BIC = NA,
+                        LogLik = NA,
+                        n = n)
+    }
+    temp$mdl = mdl_string
+    temp$numfolds = num_folds
+    if (fold == 1){ #if first part - make a df
+      perf_df = temp
+    } else { #else append to df
+      perf_df = rbind(perf_df, temp)  
+    }
+    
+  }
+  return(perf_df)
+}
+se_mdl_list = c("PupilSize ~ 1 + Ostensive*Direction + (1 + Ostensive*Direction|ParticipantID)", 
+             "PupilSize ~ 1 + Ostensive*Direction + Trial + (1 + Ostensive*Direction + Trial|ParticipantID)",
+             "PupilSize ~ 1 + Ostensive*Direction*Trial + (1 + Ostensive*Direction*Trial|ParticipantID)",
+             "PupilSize ~ 1 + Ostensive + Direction + (1 + Ostensive+Direction|ParticipantID)", 
+             "PupilSize ~ 1 + Ostensive + (1 + Ostensive|ParticipantID)", 
+             "PupilSize ~ 1 + Direction + (1 + Direction|ParticipantID)"
+             )
+time.start = proc.time()
+for (model_string in se_mdl_list){ #apply CrossVal to all of the model variations
+  temp = CrossVal(num_folds = 3, dataset = se_df, mdl_string = model_string, ID_col = "ParticipantID", CAT_col = NULL, glmer = T)
+  if (model_string == se_mdl_list[1]){
+    se_perf_df = temp
+  } else {
+    se_perf_df = rbind(se_perf_df, temp)
+  }
+  print(paste("Running for (model_string in se_mdl_list)",
+          round(match(model_string, se_mdl_list)/length(se_mdl_list)*100), 
+          "%", "- in", round((proc.time() - time.start)[3], 2), "seconds"), sep =  "") 
+}
+se_perf_df_sum = group_by(se_perf_df, mdl) %>%
+  summarise_all(funs(mean(., na.rm = TRUE)))
+#Social engagement visualisations
+#setting color palette
+jet.colors = colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+  #Scanpath
+    #reading img
+img_fdiro <- readJPEG("stimSocialEngPics/fdiro.jpg")
+g_fdiro <- rasterGrob(img_fdiro, interpolate = T)
+se_df1 = subset(se_df, ParticipantID=='1_2_f' & video=='f_pl_o1_dir_+o')
+ggplot(se_df1, aes(x = PositionX-200, y = 1141-PositionY)) +
+  xlim(0,1518) +
+  ylim(0, 1140) +
+  annotation_custom(g_fdiro, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = se_df1$Duration/200, alpha = 0.5, color = "white") + 
+  geom_path(size = 1, alpha = 0.3) + 
+  geom_text(aes(label = Fixation, size = 5))
+img_mdiv <- readJPEG("stimSocialEngPics/mdiv.jpg")
+g_mdiv <- rasterGrob(img_mdiv, interpolate = T)
+se_df1 = subset(se_df, ParticipantID=='1_2_f' & video=='m_pl_o1_div_-o')
+ggplot(se_df1, aes(x = PositionX-200, y = 1141-PositionY)) +
+  xlim(0,1518) +
+  ylim(0, 1140) +
+  annotation_custom(g_mdiv, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = se_df1$Duration/200, alpha = 0.5, color = "white") + 
+  geom_path(size = 1, alpha = 0.3) + 
+  geom_text(aes(label = Fixation, size = 5))
+  #PS growth curve
+ggplot(se_df, aes(x = StartTime, y = PupilSize), na.rm = T) +
+  facet_grid(~Direction + Ostensive) +
+  geom_smooth()
+###Visual Seach models
+  #visual seach patterns are affected by task structure
+vs_fix <-  subset(df_fix1, Task == "VisualSearch")
+vs_sac <-  subset(df_sac1, Task == "VisualSearch")
+  #the to primary models 
+m2 = glmer(Duration ~ SearchType*Fixation +  (1 + SearchType*Fixation|ParticipantID), vs_fix, 
+           family = gaussian(link = "log"), 
+           control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+m3 = glmer(Amplitude ~ SearchType*Saccade + (1 + SearchType*Saccade|ParticipantID), vs_sac, 
+           family = gaussian(link = "log"), 
+           control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+summary(m2)
+summary(m3)
+  
+  #variations of the two models
+m2_list = c("Duration ~ SearchType*Fixation + (1 + SearchType*Fixation|ParticipantID)", 
+             "Duration ~ SearchType+Fixation + (1 + SearchType+Fixation|ParticipantID)", 
+             "Duration ~ SearchType + (1 + SearchType|ParticipantID)" 
+             )
+m3_list = c("Amplitude ~ SearchType*Saccade + (1 + SearchType*Saccade|ParticipantID)", 
+             "Amplitude ~ SearchType+Saccade + (1 + SearchType+Saccade|ParticipantID)", 
+             "Amplitude ~ SearchType + (1 + SearchType|ParticipantID)" 
+             )
+  #setting vectors to be the right types
+vs_fix$Task = as.factor(as.character(vs_fix$Task))
+vs_fix$Trial = as.integer(vs_fix$Trial)
+vs_fix$ParticipantID = droplevels(vs_fix$ParticipantID)
+vs_fix$SearchType = as.factor(vs_fix$SearchType)
+  #CrossVal of the two models
+time.start = proc.time()
+for (model_string in m2_list){ #apply CrossVal to all of the model variations
+  temp = CrossVal(num_folds = 3, dataset = vs_fix, mdl_string = model_string, ID_col = "ParticipantID", CAT_col = NULL, glmer = T)
+  if (model_string == m2_list[1]){
+    vs_perf_df1 = temp
+  } else {
+    vs_perf_df1 = rbind(vs_perf_df1, temp)
+  }
+  print(paste("Running for (model_string in m2_list)",
+          round(match(model_string, m2_list)/length(m2_list)*100), 
+          "%", "- in", round((proc.time() - time.start)[3], 2), "seconds"), sep =  "") 
+}
+vs_perf_df1_sum = group_by(vs_perf_df1, mdl) %>%
+  summarise_all(funs(mean(., na.rm = TRUE)))
+time.start = proc.time()
+for (model_string in m3_list){ #apply CrossVal to all of the model variations
+  temp = CrossVal(num_folds = 3, dataset = vs_sac, mdl_string = model_string, ID_col = "ParticipantID", CAT_col = NULL, glmer = T)
+  if (model_string == m3_list[1]){
+    vs_perf_df2 = temp
+  } else {
+    vs_perf_df2 = rbind(vs_perf_df1, temp)
+  }
+  print(paste("Running for (model_string in m3_list)",
+          round(match(model_string, m3_list)/length(m3_list)*100), 
+          "%", "- in", round((proc.time() - time.start)[3], 2), "seconds"), sep =  "") 
+}
+vs_perf_df2_sum = group_by(vs_perf_df2, mdl) %>%
+  summarise_all(funs(mean(., na.rm = TRUE)))
+  #updated versions of the original models based on the crossVal 
+m2 = glmer(Duration ~ SearchType + (1 + SearchType|ParticipantID), vs_fix, 
+           family = gaussian(link = "log"), 
+           control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+m3 = glmer(Amplitude ~ SearchType + (1 + SearchType|ParticipantID), vs_sac, 
+           family = gaussian(link = "log"), 
+           control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+summary(m2)
+summary(m3)
+###Using ludvigs package (doesn't seem to work) - ignore this
+fold_VS = fold(subset(df_fix1, Task == "VisualSearch"), 3, cat_col = "SearchType", id_col = "ParticipantID")
+#setting vectors to be the right types
+fold_VS$Task = as.factor(as.character(fold_VS$Task))
+fold_VS$Trial = as.integer(fold_VS$Trial)
+fold_VS$ParticipantID = droplevels(fold_VS$ParticipantID)
+fold_VS$SearchType = as.factor(fold_VS$SearchType)
+perf_df = cross_validate(data = fold_VS, models = "Duration ~ SearchType + (1 + SearchType|ParticipantID)", folds_col = ".folds", family = "gaussian",
+  link = "log")
+perf_df
+### Visual search visualizations
+#reading img
+img_c <- readJPEG("Eye tracking data/eyetrackingscripts/foraging/ng090ws.jpg")
+g_c <- rasterGrob(img_c, interpolate = T)
+img_s <- readJPEG("Eye tracking data/eyetrackingscripts/foraging/ng021ws.jpg")
+g_s <- rasterGrob(img_s, interpolate = T)
+#Heatmap
+ggplot(subset(df_fix1, Task=='VisualSearch' & ParticipantID=='2_2_f2' & Trial==1), aes(x = PositionX, y = 1081 -PositionY)) +
+  xlim(0,1920) +
+  ylim(0, 1080) +
+  annotation_custom(g_c, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) +
+scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans='sqrt')
+ggplot(subset(df_fix1, Task=='VisualSearch' & ParticipantID=='2_2_f2' & Trial==6), aes(x = PositionX, y = 1081 - PositionY)) +
+  xlim(0,1920) +
+  ylim(0, 1080) +
+  annotation_custom(g_s, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) +
+scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans='sqrt')
+#Scanpath
+ggplot(subset(df_fix1, Task=='VisualSearch' & ParticipantID=='2_2_f2' & Trial==6), aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0, 1080) +
+  annotation_custom(g_s, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = 5, alpha = 0.5, color = "white") + 
+  geom_path(size = 1, alpha = 0.3) + 
+  geom_text(aes(label = Fixation, size = 5))
+ggplot(subset(df_fix1, Task=='VisualSearch' & ParticipantID=='2_2_f2' & Trial==1), aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0, 1080) +
+  annotation_custom(g_c, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = 5, alpha = 0.5, color = "white") + 
+  geom_path(size = 1, alpha = 0.3) + 
+  geom_text(aes(label = Fixation, size = 5))
+  #VS amp density curve
+ggplot(vs_sac, aes(x = Amplitude, color = SearchType), na.rm = T) +
+  geom_density()
+ggplot(vs_sac, aes(x = Amplitude, color = ParticipantID), na.rm = T) +
+  facet_grid(~SearchType) +
+  geom_density()
+colnames(vs_sac)
