@@ -26,9 +26,10 @@ Steps:
 6) CV of models
 
 
+Loading packages, loading data and cleaning datasets
 ```{r}
 library(pacman)
-p_load(ggplot2,dplyr,stringr,tidyverse,data.table,knitr,lime,caret)
+p_load(ggplot2,dplyr,stringr,tidyverse,data.table,knitr,caret)
 library(lmerTest)
 
 #Cleaning the rating + art interest data - looking at the population
@@ -48,7 +49,14 @@ df = plyr::rename(df,c("condition" = "group"))
 #A column which only contains info about whether or not the participant recieived a briefing or not, O = no briefing, 1 = briefing
 df$condition = str_extract(df$group, "\\d")
 
+#EYE-TRACKING DATA
+#itrackr
+#edf
+```
 
+Are the groups well-balanced?
+
+```{r}
 df2 <- df %>%
   group_by(ID) %>%
   summarize(
@@ -62,15 +70,16 @@ df2 <- df %>%
     q8 = q8[1],
     q9 = q9[1],
     q10 = q10[1],
+    q11 = q11[1],
     condition = condition[1]
   )
 
-plot1 <- ggplot(df2,aes(y=q1,x=condition))+geom_boxplot()+ggtitle("Would you go to a museum to see this picture?")
-plot2 <- ggplot(df2,aes(y=q2,x=condition))+geom_boxplot()+ggtitle("Would you recommend others to do the same?")
-plot3 <- ggplot(df2,aes(y=q3,x=condition))+geom_boxplot()+ggtitle("Would you buy this picture?")
-plot4 <- ggplot(df2,aes(y=q4,x=condition))+geom_boxplot()+ggtitle("Would you be able to explain the main idea?")
-plot5 <- ggplot(df2,aes(y=q5,x=condition))+geom_boxplot()+ggtitle("Would you be able to identify other artworks by same artist? ")
-plot6 <- ggplot(df2,aes(y=q6,x=condition))+geom_boxplot()+ggtitle("Would you be able to explain the main idea behind artworks like this?")
+plot1 <- ggplot(df2,aes(y=q1,x=condition))+geom_boxplot()+ggtitle("Go to a museum to see this picture?")
+plot2 <- ggplot(df2,aes(y=q2,x=condition))+geom_boxplot()+ggtitle("Recommend others to do the same?")
+plot3 <- ggplot(df2,aes(y=q3,x=condition))+geom_boxplot()+ggtitle("Buy this picture?")
+plot4 <- ggplot(df2,aes(y=q4,x=condition))+geom_boxplot()+ggtitle("Explain the main idea?")
+plot5 <- ggplot(df2,aes(y=q5,x=condition))+geom_boxplot()+ggtitle("Identify other artworks by same artist? ")
+plot6 <- ggplot(df2,aes(y=q6,x=condition))+geom_boxplot()+ggtitle("Explain the main idea behind similar artworks?")
 
 library(ggpubr)
 ggarrange(
@@ -87,14 +96,32 @@ plot7 <- ggplot(df2,aes(x=q7))+geom_bar()+ggtitle("Seen before?")+facet_wrap(~co
 plot8 <- ggplot(df2,aes(y=q8,x=condition))+geom_boxplot()+ggtitle("Interested in art?")
 plot9 <- ggplot(df2,aes(y=q9,x=condition))+geom_boxplot()+ggtitle("Museum?")
 plot10 <- ggplot(df2,aes(y=q10,x=condition))+geom_boxplot()+ggtitle("Read about art?")
+plot11 <- ggplot(df2,aes(x = q11))+geom_bar()+ggtitle("Art Course?")+facet_wrap(~condition)
 
 ggarrange(
   plot7,
   plot8,
   plot9,
-  plot10
+  plot10, 
+  plot11
 )
 
+#Group 1 appears to be more intersted in art - could be influenced by the briefing 
+#Let's test if the difference is signifcant
+mq7 = glm(q7 ~ condition,family = binomial , df2)
+mq8 = lm(q8 ~ condition,df2)
+mq9 = lm(q9 ~ condition,df2)
+mq10 = lm(q10 ~ condition,df2)
+mq11 = glm(q11 ~ condition,family = binomial,df2)
+
+summary(mq7)
+summary(mq8)
+summary(mq9)
+summary(mq10)
+summary(mq11)
+```
+
+```{r}
 df$q1 = as.numeric(df$q1)
 df$q2 = as.numeric(df$q2)
 df$q3 = as.numeric(df$q3)
@@ -106,9 +133,9 @@ df$q9 = as.numeric(df$q9)
 df$q10 = as.numeric(df$q10)
 
 #Looking at the population:
-mean(df$age)
+summary(df$age)
 summary(df$gender)/40 #The reason female is not a whole number - ID 1 saw only 39 images
-summary(df$q7)/21 #On average, each participants has seen 1.9 image out of 40 - (it's divided by the number of participants)
+summary(df$q7)/27 #On average, each participants has seen 1.9 image out of 40 - (it's divided by the number of participants)
 summary(df$image[df$q7 == "yes"]) #Most familiar images - so far it's schiele
 length(df$ID[df$q11 == "yes"])/40 #How many people have taken art-classes? - again, not a whole number because of ID 1
 
@@ -187,8 +214,16 @@ m2 = lmerTest::lmer(TotalScore_liking ~ 1 + condtion + (1|image),App_df)
 
 ```
 
-install itrackR
+Need to install.packages("devtools") - Is there something wrong with Rtools? The software I downloaded from SR-Research?
+Somethings wrong with devtools
 
+
+install matlabr
+devtools::install_github("muschellij2/matlabr")
+install edfR
+devtools::install_github("jashubbard/edfR")
+install itrackR
+devtools::install_github("jashubbard/itrackR", build_vignettes=True) #what is vignettes?
 
 #Stuff from Kenneth K and I (ET assignment 4th sem)
 #set WD and load packages
