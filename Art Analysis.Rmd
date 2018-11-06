@@ -28,9 +28,18 @@ Steps:
 
 Loading packages, loading data and cleaning datasets
 ```{r}
-library(pacman)
-p_load(ggplot2,dplyr,stringr,tidyverse,data.table,knitr,caret)
+library(devtools)
+library(tidyverse)
+library(ggplot2)
+library(data.table)
+library(knitr)
+library(dplyr)
+#library(stringr)
+#library(caret)
 library(lmerTest)
+library(matlabr)
+
+#options(repos = getOption("repos")["CRAN"])
 
 #Cleaning the rating + art interest data - looking at the population
 temp = list.files(path = "C:/Users/Ejer/Desktop/Bachelor/Experiment/data", pattern = "*.csv", full.names = T)
@@ -214,21 +223,16 @@ m2 = lmerTest::lmer(TotalScore_liking ~ 1 + condtion + (1|image),App_df)
 
 ```
 
-Need to install.packages("devtools") - Is there something wrong with Rtools? The software I downloaded from SR-Research?
-Somethings wrong with devtools
 
 
-install matlabr
-devtools::install_github("muschellij2/matlabr")
+
 install edfR
 devtools::install_github("jashubbard/edfR")
 install itrackR
-devtools::install_github("jashubbard/itrackR", build_vignettes=True) #what is vignettes?
+devtools::install_github("jashubbard/itrackR", build_vignettes=True)
 
 #Stuff from Kenneth K and I (ET assignment 4th sem)
 #set WD and load packages
-library(pacman)
-p_load(data.table, lmerTest, dplyr, groupdata2, stringr, MuMIn, cvms, ggplot2, jpeg, grid)
 #opening multiple log files in one df
 folder = "/Users/kennethenevoldsen/Desktop/Github/Statistic R/Assignments/EyeTracking/EyeTracking/Eye tracking data/PupilsLogs/"
 fileList = list.files(path=folder, pattern="*.csv")
