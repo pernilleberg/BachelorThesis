@@ -28,6 +28,10 @@ Steps:
 
 Loading packages, loading data and cleaning datasets
 ```{r}
+
+Saltest = read.csv("test4.csv", header = T)
+
+
 library(devtools)
 library(tidyverse)
 library(ggplot2)
