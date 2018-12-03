@@ -17,9 +17,9 @@ Steps:
   Behavioral: Bar plots
   ET: Heat maps and scan paths (see port 1 4th sem)
 4) Models
-  Behavioral: lmer
+  Behavioral: (g)lmer
     a. calculating mean score of rating (q1+q2+q3/3) and understanding (q4+q5+q6/3) for each image
-  ET: lmer
+  ET: glmer
 5) Saliency algoritm
   ET: looking at the effect of saliency 
   ROC and AUC
@@ -29,48 +29,135 @@ Steps:
 Loading packages, loading data and cleaning datasets
 ```{r}
 
-Saltest = read.csv("test4.csv", header = T)
-
+#Sal_abs14 = read.csv("abs14.csv", header = T)
 
 library(devtools)
 library(tidyverse)
-library(ggplot2)
 library(data.table)
-library(knitr)
-library(dplyr)
+#library(knitr)
+library(ggpubr)
 #library(stringr)
 #library(caret)
 library(lmerTest)
-library(matlabr)
-
-#options(repos = getOption("repos")["CRAN"])
-
-#Cleaning the rating + art interest data - looking at the population
-temp = list.files(path = "C:/Users/Ejer/Desktop/Bachelor/Experiment/data", pattern = "*.csv", full.names = T)
-myfiles = lapply(temp,read.delim,sep=",",header = T)
-Rating_df=rbindlist(myfiles, fill = T)
-
-temp = list.files(path = "C:/Users/Ejer/Desktop/Bachelor/Experiment/data/questionaire", pattern = "*.csv", full.names = T)
-myfiles = lapply(temp,read.delim,sep=",",header = T)
-ArtInt_df=rbindlist(myfiles, fill = T)
-
-#Binding them together
-temp = select(ArtInt_df,ID,q8,q9,q10,q11)
-temp_df = subset(Rating_df,select=-c(X,q8,q9,q10,q11))
-df = merge(temp_df, temp, all = T)
-df = plyr::rename(df,c("condition" = "group")) 
-#A column which only contains info about whether or not the participant recieived a briefing or not, O = no briefing, 1 = briefing
-df$condition = str_extract(df$group, "\\d")
-
-#EYE-TRACKING DATA
-#itrackr
-#edf
+#library(matlabr)
 ```
 
-Are the groups well-balanced?
+Are the groups well-balanced? Preliminary Data exploration
 
 ```{r}
-df2 <- df %>%
+BehaveDat = read.csv("BehavioralData_New.csv", header = T) #Behavioural Data only
+BehaveDat = subset(BehaveDat, select = -c(X))
+
+SacDat = read.csv("SaccadesData_New.csv",header = T) #ET data for saccades + Behavioural Data
+SacDat = subset(SacDat, select = -c(X))
+
+ScaleData = subset(SacDat, ID == 1)
+ScaleData1 = subset(SacDat, ID == 3)
+ScaleData2 = rbind(ScaleData, ScaleData1)
+ScaledData = ScaleData2 %>%
+  group_by(ID, image) %>%
+  groupdata2::group(n = 4, method = 'greedy') %>%
+  summarise(
+    ID = ID[1],
+    age = age[1],
+    gender = gender[1],
+    group = group[1],
+    image = image[1],
+    q1 = q1[1],
+    q2 = q2[1],
+    q3 = q3[1],
+    q4 = q4[1],
+    q5 = q5[1],
+    q6 = q6[1],
+    q7 = q7[1],
+    q8 = q8[1],
+    q9 = q9[1],
+    q10 = q10[1],
+    q11 = q11[1],
+    condition = condition[1],
+    Trial = Trial[1],
+    event = event[1],
+    sttime = (sttime[1]+sttime[2]+sttime[3]+sttime[4])/4,
+    entime = (entime[1]+entime[2]+entime[3]+entime[4])/4,
+    StartPositionX = StartPositionX[1],
+    StartPositionY = StartPositionY[1],
+    EndPositionX = EndPositionX[1],
+    EndPositionY = EndPositionY[1],
+    avel = avel[1],
+    pvel = pvel[1],
+    Duration = Duration[1],
+    Number_sac = Number_sac[1],
+    artist = artist[1],
+    genre = genre[1]
+  )
+
+ScaledData = subset(ScaledData, select = -c(.groups))
+SacDat = SacDat[!(SacDat$ID==1),]
+SacDat = SacDat[!(SacDat$ID==3),]
+SacDat = rbind(SacDat,ScaledData)
+SacDat = SacDat[order(SacDat$ID),]
+
+FixDat = read.csv("FixationsData_New.csv", header = T) #ET data for fixations + Behavioural Data
+FixDat = subset(FixDat, select = -c(X))
+
+ScaleDataFix = subset(FixDat, ID == 1)
+ScaleDataFix1 = subset(FixDat, ID == 3)
+ScaleDataFix2 = rbind(ScaleDataFix, ScaleDataFix1)
+ScaledDataFix = ScaleDataFix2 %>%
+  group_by(ID, image) %>%
+  groupdata2::group(n = 4, method = 'greedy') %>%
+  summarise(
+    ID = ID[1],
+    age = age[1],
+    gender = gender[1],
+    group = group[1],
+    image = image[1],
+    q1 = q1[1],
+    q2 = q2[1],
+    q3 = q3[1],
+    q4 = q4[1],
+    q5 = q5[1],
+    q6 = q6[1],
+    q7 = q7[1],
+    q8 = q8[1],
+    q9 = q9[1],
+    q10 = q10[1],
+    q11 = q11[1],
+    condition = condition[1],
+    Trial = Trial[1],
+    event = event[1],
+    sttime = (sttime[1]+sttime[2]+sttime[3]+sttime[4])/4,
+    entime = (entime[1]+entime[2]+entime[3]+entime[4])/4,
+    PositionX = PositionX[1],
+    PositionY = PositionY[1],
+    Duration = Duration[1],
+    Number_fix = Number_fix[1],
+    artist = artist[1],
+    genre = genre[1]
+  )
+
+ScaledDataFix = subset(ScaledDataFix, select = -c(.groups))
+FixDat = FixDat[!(FixDat$ID==1),]
+FixDat = FixDat[!(FixDat$ID==3),]
+FixDat = rbind(FixDat,ScaledDataFix)
+FixDat = FixDat[order(FixDat$ID),]
+
+#Looking at the population:
+Experts = subset(BehaveDat, condition == 1)
+NonExperts = subset(BehaveDat, condition == 0)
+summary(Experts$gender)/40 #The reason female is not a whole number - ID 1 saw only 39 images
+summary(NonExperts$gender)/40
+mean(Experts$age)
+mean(NonExperts$age)
+summary(BehaveDat$q7)/27
+summary(BehaveDat$q7[BehaveDat$condition == 1])/13
+summary(BehaveDat$q7[BehaveDat$condition == 0])/14
+#On average, each participants has seen 1.9 image out of 40 - (it's divided by the number of participants)
+summary(BehaveDat$image[BehaveDat$q7 == "yes"]) #Most familiar images - so far it's schiele
+length(BehaveDat$ID[BehaveDat$q11 == "yes"])/40 #How many people have taken art-classes? - again, not a whole number because of ID 1
+summary(BehaveDat$image[BehaveDat$q7 == "yes"])
+
+BehaveDat2 <- BehaveDat %>% #summarizing mean of ratings for each participants 
   group_by(ID) %>%
   summarize(
     q1 = q1[1],
@@ -87,14 +174,14 @@ df2 <- df %>%
     condition = condition[1]
   )
 
-plot1 <- ggplot(df2,aes(y=q1,x=condition))+geom_boxplot()+ggtitle("Go to a museum to see this picture?")
-plot2 <- ggplot(df2,aes(y=q2,x=condition))+geom_boxplot()+ggtitle("Recommend others to do the same?")
-plot3 <- ggplot(df2,aes(y=q3,x=condition))+geom_boxplot()+ggtitle("Buy this picture?")
-plot4 <- ggplot(df2,aes(y=q4,x=condition))+geom_boxplot()+ggtitle("Explain the main idea?")
-plot5 <- ggplot(df2,aes(y=q5,x=condition))+geom_boxplot()+ggtitle("Identify other artworks by same artist? ")
-plot6 <- ggplot(df2,aes(y=q6,x=condition))+geom_boxplot()+ggtitle("Explain the main idea behind similar artworks?")
+plot1 <- ggplot(BehaveDat2,aes(y=q1,x=condition))+geom_boxplot()+ggtitle("Go to a museum to see this picture?")+
+  xlab("Condition") + ylab("Question 1")
+plot2 <- ggplot(BehaveDat2,aes(y=q2,x=condition))+geom_boxplot()+ggtitle("Recommend others to do the same?")
+plot3 <- ggplot(BehaveDat2,aes(y=q3,x=condition))+geom_boxplot()+ggtitle("Buy this picture?")
+plot4 <- ggplot(BehaveDat2,aes(y=q4,x=condition))+geom_boxplot()+ggtitle("Explain the main idea?")
+plot5 <- ggplot(BehaveDat2,aes(y=q5,x=condition))+geom_boxplot()+ggtitle("Identify other artworks by same artist? ")
+plot6 <- ggplot(BehaveDat2,aes(y=q6,x=condition))+geom_boxplot()+ggtitle("Explain the main idea behind similar artworks?")
 
-library(ggpubr)
 ggarrange(
   plot1,
   plot2,
@@ -104,176 +191,262 @@ ggarrange(
   plot6
 )
 
+#plot7 <- ggplot(BehaveDat2,aes(x=q7))+geom_bar(fill = "#999999")+facet_wrap(~condition)+
+ # xlab("Question 7") + ylab("Number of Participants")
+plot8 <- ggplot(BehaveDat2,aes(y=q8,x=condition))+geom_boxplot()+xlab("Condition")+ylab("Rating")+ggtitle("Question 8")+coord_cartesian(ylim = c(1, 7))
+plot9 <- ggplot(BehaveDat2,aes(y=q9,x=condition))+geom_boxplot()+xlab("Condition")+ylab("Rating")+ggtitle("Question 9")+ coord_cartesian(ylim = c(1, 7))
+plot10 <- ggplot(BehaveDat2,aes(y=q10,x=condition))+geom_boxplot()+xlab("Condition")+ylab("Rating") + ggtitle("Question 10") + coord_cartesian(ylim = c(1,7))
+plot11 <- ggplot(BehaveDat2,aes(x = q11))+geom_bar(fill = "#999999")+facet_wrap(~condition)+ xlab("Question 11") + ylab("Number of Participants")+ggtitle("Question 11")
 
-plot7 <- ggplot(df2,aes(x=q7))+geom_bar()+ggtitle("Seen before?")+facet_wrap(~condition)
-plot8 <- ggplot(df2,aes(y=q8,x=condition))+geom_boxplot()+ggtitle("Interested in art?")
-plot9 <- ggplot(df2,aes(y=q9,x=condition))+geom_boxplot()+ggtitle("Museum?")
-plot10 <- ggplot(df2,aes(y=q10,x=condition))+geom_boxplot()+ggtitle("Read about art?")
-plot11 <- ggplot(df2,aes(x = q11))+geom_bar()+ggtitle("Art Course?")+facet_wrap(~condition)
+BehaveDat2$q11 = plyr::revalue(BehaveDat2$q11,c("yes"="1","no"="0"))
+
+ggarrange(
+  plot8,
+  plot9,
+  plot10,
+  plot11
+)
 
 ggarrange(
   plot7,
-  plot8,
-  plot9,
-  plot10, 
   plot11
+
 )
 
 #Group 1 appears to be more intersted in art - could be influenced by the briefing 
 #Let's test if the difference is signifcant
-mq7 = glm(q7 ~ condition,family = binomial , df2)
-mq8 = lm(q8 ~ condition,df2)
-mq9 = lm(q9 ~ condition,df2)
-mq10 = lm(q10 ~ condition,df2)
-mq11 = glm(q11 ~ condition,family = binomial,df2)
+#$q8 = as.factor(BehaveDat2$q8)
+#BehaveDat2$q9 = as.factor(BehaveDat2$q9)
+#BehaveDat2$q10 = as.factor(BehaveDat2$q10)
 
-summary(mq7)
-summary(mq8)
-summary(mq9)
-summary(mq10)
-summary(mq11)
+mean(BehaveDat2$q8[BehaveDat2$condition == 1])
+sd(BehaveDat$q8[BehaveDat2$condition == 1])
+mean(BehaveDat2$q8[BehaveDat2$condition == 0])
+sd(BehaveDat$q8[BehaveDat2$condition == 0])
+
+mean(BehaveDat2$q9[BehaveDat2$condition == 1])
+sd(BehaveDat$q9[BehaveDat2$condition == 1])
+mean(BehaveDat2$q9[BehaveDat2$condition == 0])
+sd(BehaveDat$q9[BehaveDat2$condition == 0])
+
+mean(BehaveDat2$q10[BehaveDat2$condition == 1])
+sd(BehaveDat$q10[BehaveDat2$condition == 1])
+mean(BehaveDat2$q10[BehaveDat2$condition == 0])
+sd(BehaveDat$q10[BehaveDat2$condition == 0])
+
+
+InterestModel = glm(condition ~ 1 + q8 + q9 + q10, family = binomial, BehaveDat2)
+summary(InterestModel)
+
+mq7 = glm(q7 ~ condition, family = binomial, BehaveDat2)
+mq8 = glm(q8 ~ condition, family = poisson,BehaveDat2)
+mq9 = glm(q9 ~ condition,family = binomial(link = "logit"),BehaveDat2)
+mq10 = glm(q10 ~ condition,family = binomial(link = "logit"),BehaveDat2)
+mq11 = glm(q11 ~ condition,family = binomial, BehaveDat2)
+
+BehaveDat2$q11 = plyr::revalue(BehaveDat2$q11,c("1"="yes","0"="no"))
 ```
 
+Assessing quality of ET-data
 ```{r}
-df$q1 = as.numeric(df$q1)
-df$q2 = as.numeric(df$q2)
-df$q3 = as.numeric(df$q3)
-df$q4 = as.numeric(df$q4)
-df$q5 = as.numeric(df$q5)
-df$q6 = as.numeric(df$q6)
-df$q8 = as.numeric(df$q8)
-df$q9 = as.numeric(df$q9)
-df$q10 = as.numeric(df$q10)
+#Heatmaps and scanpaths
+#Subsetting dataframe to make heatmaps for 4 chosen images - all participants included
+heat1 = subset(FixDat, image == "images_schiele\\fig_11.png")
+heat2 = subset(FixDat, image == "images_rothko\\abstract_6.png")
+heat3 = subset(FixDat, image == "images_pollock\\abstract_17.png")
+heat4 = subset(FixDat, image == "images_chagall\\fig_8.png")
 
-#Looking at the population:
-summary(df$age)
-summary(df$gender)/40 #The reason female is not a whole number - ID 1 saw only 39 images
-summary(df$q7)/27 #On average, each participants has seen 1.9 image out of 40 - (it's divided by the number of participants)
-summary(df$image[df$q7 == "yes"]) #Most familiar images - so far it's schiele
-length(df$ID[df$q11 == "yes"])/40 #How many people have taken art-classes? - again, not a whole number because of ID 1
+jet.colors = colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
 
-Art_interest_df = subset(df, select = c(ID,q8,q9,q10))
-Art_interest_df$Art_IntScore = (Art_interest_df$q8+Art_interest_df$q9+Art_interest_df$q10)/3
-Art_interest_df = aggregate(Art_interest_df,list(Art_interest_df$ID),mean)
-Art_interest_df = subset(Art_interest_df, select = -c(Group.1))
-mean(Art_interest_df$Art_IntScore) #How interested are people in general in art?
+img <- png::readPNG("images for heatmaps and scanpaths/screenshot_fig11.png")
+g <- grid::rasterGrob(img, interpolate = T)
+ggplot(subset(ScaledDataFix, ID == 1 & image == "images_schiele\\fig_11.png"),aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0,1080) +
+  annotation_custom(g,xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) + scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans='sqrt')
 
-#Are the group well-balanced?
-#Getting the mean for rating (understanding and rating) for each image - Basically just looking at condition means
-App_1 = subset(df, condition == 1)
-App_1 = subset(App_1,select=c(image,q1,q2,q3))
-App_1=aggregate(App_1, list(App_1$image),mean)
-App_1$TotalScore_liking = (App_1$q1 + App_1$q2 + App_1$q3)/3
-App_1 = subset(App_1, select = -c(image))
-App_1 = plyr::rename(App_1,c("Group.1" = "image"))
-App_1$condition = 1
-App_1 = subset(App_1, select = -c(q1,q2,q3))
-mean(App_1$TotalScore_liking)
+img <- png::readPNG("images for heatmaps and scanpaths/screenshot_abs17.png")
+g <- grid::rasterGrob(img,interpolate = T)
+ggplot(subset(heat3, ID == 1), aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0,1080) +
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) +
+scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans='sqrt')
 
-App_0 = subset(df, condition == 0)
-App_0 = subset(App_0,select=c(image,q1,q2,q3))
-App_0 = aggregate(App_0, list(App_0$image),mean)
-App_0$TotalScore_liking = (App_0$q1 + App_0$q2 + App_0$q3)/3
-App_0 = subset(App_0, select = -c(image))
-App_0 = plyr::rename(App_0,c("Group.1" = "image"))
-App_0$condition = 0
-App_0 = subset(App_0, select = -c(q1,q2,q3))
-mean(App_0$TotalScore_liking)
+img <- png::readPNG("abstract_6.png")
+g <- grid::rasterGrob(img,interpolate = T)
+ggplot(subset(heat2, ID == 8), aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0,1080) +
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) +
+scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans='sqrt')
 
-App_df = rbind(App_1,App_0)
-App_df$genre = str_extract(App_df,"")
-App_df$artst = str_extract()
+img <- png::readPNG("fig_8.png")
+g <- grid::rasterGrob(img,interpolate = T)
+ggplot(heat4, aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0,1080) +
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) +
+scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans='sqrt')
 
-Und_1 = subset(df, condition == 1)
-Und_1 = subset(Und_1, select = c(image, q4,q5,q6))
-Und_1 = aggregate(Und_1,list(Und_1$image),mean)
-Und_1$TotalScore_Understand = (Und_1$q4 + Und_1$q5 + Und_1$q6)/3
-Und_1 = subset(Und_1, select = -c(image))
-Und_1 = plyr::rename(Und_1, c("Group.1" = "image"))
-Und_1$condition = 1
-Und_1 = subset(Und_1, select = -c(q4,q5,q6))
-mean(Und_1$TotalScore_Understand)
+#Scanpath -
+img <- png::readPNG("fig_11.png")
+g <- grid::rasterGrob(img,interpolate = T)
+ggplot(subset(heat1, ID == 1), aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0, 1080) +
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = 5, alpha = 0.5, color = "white") + 
+  geom_path(size = 1, alpha = 0.3)
 
-Und_0 = subset(df, condition == 0)
-Und_0 = subset(Und_0, select = c(image, q4,q5,q6))
-Und_0 = aggregate(Und_0,list(Und_0$image),mean)
-Und_0$TotalScore_Understand = (Und_0$q4 + Und_0$q5 + Und_0$q6)/3
-Und_0 = subset(Und_0, select = -c(image))
-Und_0 = plyr::rename(Und_0, c("Group.1" = "image"))
-Und_0$condition = 0
-Und_0 = subset(Und_0, select = -c(q4,q5,q6))
-mean(Und_0$TotalScore_Understand)
+img <- png::readPNG("abstract_17.png")
+g <- grid::rasterGrob(img,interpolate = T)
+ggplot(heat3, aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0, 1080) +
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = 5, alpha = 0.5, color = "white") + 
+  geom_path(size = 1, alpha = 0.3) 
 
-Und_df = rbind(Und_1,Und_0)
-Und_df$artist = str_extract(Und_df$image, "images\\w+")
-Und_df$artist = gsub("\\images_","",Und_df$artist)
+img <- png::readPNG("abstract_6.png")
+g <- grid::rasterGrob(img,interpolate = T)
+ggplot(heat2, aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0, 1080) +
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = 5, alpha = 0.5, color = "white") + 
+  geom_path(size = 1, alpha = 0.3) 
 
+img <- png::readPNG("fig_8.png")
+g <- grid::rasterGrob(img,interpolate = T)
+ggplot(heat4, aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0, 1080) +
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = 5, alpha = 0.5, color = "white") + 
+  geom_path(size = 1, alpha = 0.3) 
 
-Und_df$genre = gsub("\\images_","",Und_df$image)
-Und_df$genre =gsub("","",Und_df$artist)
+FixDat$Duration = as.numeric(FixDat$Duration)
+
+#Density plot for saccades and fixation duration - Poisson
+ggplot(subset(SacDat,SacDat$Duration < 300), aes(Duration, na.rm = T)) + geom_density() + ggtitle("Density - Duration of Saccades")
+
+#Removing saccades with a duration over 300 - that's mistakes
+SacDat = subset(SacDat,SacDat$Duration < 300)
+
+ggplot(FixDat, aes(Duration,na.rm = T)) + geom_density() + ggtitle("Density - Duration of Fixations")
+
+#Values to exclude based on their duration - saccades only 300 ms 
+#Frequency of saccades
+SacDat2  <- SacDat %>% 
+  group_by(ID) %>%
+  summarize(Number_sac = Number_sac[1])
+
+FixDat2  <- FixDat %>% 
+  group_by(ID) %>%
+  summarize(Number_fix = Number_fix[1])
+
+ggplot(FixDat2, aes(Number_fix,na.rm = T)) + geom_density()
+
 ```
 
-
-
-```{r}
 #Rating models - can condition explain ratings?
-m1 = lmerTest::lmer(TotalScore_Understand ~ 1 + condition + (1|image),Und_df)
-m2 = lmerTest::lmer(TotalScore_liking ~ 1 + condtion + (1|image),App_df)
+
+```{r}
+BehaveDat3 <- BehaveDat %>% #summarizing mean of ratings for each participants 
+  group_by(image, condition) %>%
+  summarize(
+    q1 = q1[1],
+    q2 = q2[1],
+    q3 = q3[1],
+    q4 = q4[1],
+    q5 = q5[1],
+    q6 = q6[1],
+    q7 = q7[1],
+    q8 = q8[1],
+    q9 = q9[1],
+    q10 = q10[1],
+    q11 = q11[1]
+  )
+
+#Does it make sense to make means??? Check distributions - huge spread?  Does it matter?
+ggplot(BehaveDat2, aes(q8, na.rm = T)) + geom_density()
+
+
+##Models will be run first with the mean, then if time with the 
+#Median is more meaningful
+
+
+
+m1.1 = lmerTest::lmer(LikingMean ~ 1 + condition + (1|ID),BehaveDat3)
+m1.2 = lmerTest::lmer(UnderstandingMean ~ 1 + condtion + (1|ID),BehaveDat3)
+
 
 #Adding category, gender, the art interest - looking at the predictors
 
+#Remember! ET data is NOT normally distributed! Family = possion OR family = gaussian(log = "link")
+```
 
+### Eyetracking models
+
+```{r}
+#Making 1) df with the Number of Fix + Number og Sacs and 2) a df with the Duration of Fix and Duration of Sacs
+
+test1 <- FixDat %>% 
+  group_by(ID, image) %>%
+  summarize(
+    condition = condition[1],
+    Trial = Trial[1],
+    Number_fix = Number_fix[1],
+    artist = artist[1],
+    genre = genre[1]
+  )
+
+test2 <- SacDat %>% 
+  group_by(ID, image) %>%
+  summarize(
+    condition = condition[1],
+    Trial = Trial[1],
+    Number_sac = Number_sac[1],
+    artist = artist[1],
+    genre = genre[1]
+  )
+
+
+m1Data <- merge(test1,test2, by = c("ID","image"))
+m1Data <- subset(m1Data, select = -c(Trial.y,condition.y,artist.y,genre.y))
+m1Data <- plyr::rename(m1Data,c("condition.x"="condition","Trial.x"="Trial","artist.x"="artist","genre.x"="genre"))
+
+#Can condition be predicted based on fix and sac?
+m2.1 <- glmer(condition ~ 1 + Number_fix*Number_sac + (1 + Number_fix + Number_sac|ID) + (1 + Number_fix + Number_sac|image), family = "binomial", data = m1Data, control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
+
+
+m2.2 <- glmer(condition ~ 1 + Duration_fix*Duration_sac + (1 + Duration_fix + Duration_sac|ID) + (1 + Duration_fix + Duration_sac|image), family = "binomial", data = data)
+
+
+##Adding genre and arist into the mix
+m2.3 <- glmer(condition ~ 1 + Number_fix*Number_sac*genre + (1 + Number_fix + Number_sac|ID) + (1 + Number_fix + Number_sac|image), family = "binomial", data = data)
+
+m2.4 <- glmer(condition ~ 1 + Number_fix*Number_sac*artist + (1 + Number_fix + Number_sac|ID) + (1 + Number_fix + Number_sac|image), family = "binomial", data = data)
+
+
+m2.5 <- glmer(condition ~ 1 + Duration_fix*Duration_sac*genre + (1 + Duration_fix + Duration_sac|ID) + (1 + Duration_fix + Duration_sac|image), family = "binomial", data = data)
+
+m2.6 <- glmer(condition ~ 1 + Duration_fix*Duration_sac*artist + (1 + Duration_fix + Duration_sac|ID) + (1 + Duration_fix + Duration_sac|image), family = "binomial", data = data)
+
+
+m2.7 <- glmer(condition ~ 1 + Number_fix*Number_sac*genre*artist + (1 + Number_fix + Number_sac|ID) + (1 + Number_fix + Number_sac|image), family = "binomial", data = data)
+
+m2.8 <- glmer(condition ~ 1 + Duration_fix*Duration_sac*genre*artist + (1 + Duration_fix + Duration_sac|ID) + (1 + Duration_fix + Duration_sac|image), family = "binomial", data = data)
 
 
 ```
 
 
-
-
-install edfR
-devtools::install_github("jashubbard/edfR")
-install itrackR
-devtools::install_github("jashubbard/itrackR", build_vignettes=True)
-
-#Stuff from Kenneth K and I (ET assignment 4th sem)
-#set WD and load packages
-#opening multiple log files in one df
-folder = "/Users/kennethenevoldsen/Desktop/Github/Statistic R/Assignments/EyeTracking/EyeTracking/Eye tracking data/PupilsLogs/"
-fileList = list.files(path=folder, pattern="*.csv")
-temp = lapply(fileList, function(x) read.delim(paste(folder,x, sep = ""), sep = ","))
-pup_logs = rbindlist(temp, fill = T)
-pup_logs$X = pup_logs$X + 1 #add one due to the data being from python
-#define er function to clean the data (to decrease clutter)
-clean_df = function(df){
-  #merge witl the pupil logs
-  df = merge(df, pup_logs, by.x = c("ParticipantID", "Trial"), by.y = c("subject", "X"), all = T) 
-  
-  #add direction
-  df$Direction[grepl("dir", df$video)] = "directed"
-  df$Direction[grepl("div", df$video)] = "divergent"
-  
-  #add Ostensive 
-  df$Ostensive[grepl("+o", df$video)] = 1
-  df$Ostensive[grepl("-o", df$video)] = 0
-  
-  #add column called SearchType
-  df = df %>% mutate(SearchType = ifelse(SearchOrder==1 & Trial<=5, 'star', 
-                         ifelse(SearchOrder==2 & Trial<=5, 'count',
-                                ifelse(SearchOrder==1 & Trial>=6, 'count',
-                                       ifelse(SearchOrder==2 & Trial>=6, 'star', NA))))
-  )
-}
-df_fix1 = clean_df(df_fix)
-df_sac1 = clean_df(df_sac)
-df_sample1 = clean_df(df_sample)
-df_sac1$SearchType = as.factor(df_sac1$SearchType)
-### social engagement
-se_df <- subset(df_fix1, Task == "SocialEngagement")
-se_df$Direction <- as.factor(se_df$Direction)  ; se_df$Ostensive <- as.factor(se_df$Ostensive)
-se_df = droplevels(se_df)
-length(unique(se_df$ParticipantID))
-m1 = glmer(PupilSize ~ 1 + Ostensive*Direction*Trial + (1 + Ostensive*Direction*Trial|ParticipantID), se_df, family = gaussian(link = "log"), 
-                control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
 summary(m1)
   #Defing a function to get performance
 getPerformance = function(test_df, train_df, mdl, mdl_string, n = NA){
@@ -364,35 +537,7 @@ for (model_string in se_mdl_list){ #apply CrossVal to all of the model variation
 }
 se_perf_df_sum = group_by(se_perf_df, mdl) %>%
   summarise_all(funs(mean(., na.rm = TRUE)))
-#Social engagement visualisations
-#setting color palette
-jet.colors = colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
-  #Scanpath
-    #reading img
-img_fdiro <- readJPEG("stimSocialEngPics/fdiro.jpg")
-g_fdiro <- rasterGrob(img_fdiro, interpolate = T)
-se_df1 = subset(se_df, ParticipantID=='1_2_f' & video=='f_pl_o1_dir_+o')
-ggplot(se_df1, aes(x = PositionX-200, y = 1141-PositionY)) +
-  xlim(0,1518) +
-  ylim(0, 1140) +
-  annotation_custom(g_fdiro, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
-  geom_point(size = se_df1$Duration/200, alpha = 0.5, color = "white") + 
-  geom_path(size = 1, alpha = 0.3) + 
-  geom_text(aes(label = Fixation, size = 5))
-img_mdiv <- readJPEG("stimSocialEngPics/mdiv.jpg")
-g_mdiv <- rasterGrob(img_mdiv, interpolate = T)
-se_df1 = subset(se_df, ParticipantID=='1_2_f' & video=='m_pl_o1_div_-o')
-ggplot(se_df1, aes(x = PositionX-200, y = 1141-PositionY)) +
-  xlim(0,1518) +
-  ylim(0, 1140) +
-  annotation_custom(g_mdiv, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
-  geom_point(size = se_df1$Duration/200, alpha = 0.5, color = "white") + 
-  geom_path(size = 1, alpha = 0.3) + 
-  geom_text(aes(label = Fixation, size = 5))
-  #PS growth curve
-ggplot(se_df, aes(x = StartTime, y = PupilSize), na.rm = T) +
-  facet_grid(~Direction + Ostensive) +
-  geom_smooth()
+
 ###Visual Seach models
   #visual seach patterns are affected by task structure
 vs_fix <-  subset(df_fix1, Task == "VisualSearch")
@@ -459,8 +604,7 @@ m3 = glmer(Amplitude ~ SearchType + (1 + SearchType|ParticipantID), vs_sac,
            control = glmerControl(optimizer = "nloptwrap", calc.derivs = FALSE))
 summary(m2)
 summary(m3)
-###Using ludvigs package (doesn't seem to work) - ignore this
-fold_VS = fold(subset(df_fix1, Task == "VisualSearch"), 3, cat_col = "SearchType", id_col = "ParticipantID")
+
 #setting vectors to be the right types
 fold_VS$Task = as.factor(as.character(fold_VS$Task))
 fold_VS$Trial = as.integer(fold_VS$Trial)
@@ -469,44 +613,3 @@ fold_VS$SearchType = as.factor(fold_VS$SearchType)
 perf_df = cross_validate(data = fold_VS, models = "Duration ~ SearchType + (1 + SearchType|ParticipantID)", folds_col = ".folds", family = "gaussian",
   link = "log")
 perf_df
-### Visual search visualizations
-#reading img
-img_c <- readJPEG("Eye tracking data/eyetrackingscripts/foraging/ng090ws.jpg")
-g_c <- rasterGrob(img_c, interpolate = T)
-img_s <- readJPEG("Eye tracking data/eyetrackingscripts/foraging/ng021ws.jpg")
-g_s <- rasterGrob(img_s, interpolate = T)
-#Heatmap
-ggplot(subset(df_fix1, Task=='VisualSearch' & ParticipantID=='2_2_f2' & Trial==1), aes(x = PositionX, y = 1081 -PositionY)) +
-  xlim(0,1920) +
-  ylim(0, 1080) +
-  annotation_custom(g_c, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
-  stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) +
-scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans='sqrt')
-ggplot(subset(df_fix1, Task=='VisualSearch' & ParticipantID=='2_2_f2' & Trial==6), aes(x = PositionX, y = 1081 - PositionY)) +
-  xlim(0,1920) +
-  ylim(0, 1080) +
-  annotation_custom(g_s, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
-  stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) +
-scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans='sqrt')
-#Scanpath
-ggplot(subset(df_fix1, Task=='VisualSearch' & ParticipantID=='2_2_f2' & Trial==6), aes(x = PositionX, y = 1081-PositionY)) +
-  xlim(0,1920) +
-  ylim(0, 1080) +
-  annotation_custom(g_s, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
-  geom_point(size = 5, alpha = 0.5, color = "white") + 
-  geom_path(size = 1, alpha = 0.3) + 
-  geom_text(aes(label = Fixation, size = 5))
-ggplot(subset(df_fix1, Task=='VisualSearch' & ParticipantID=='2_2_f2' & Trial==1), aes(x = PositionX, y = 1081-PositionY)) +
-  xlim(0,1920) +
-  ylim(0, 1080) +
-  annotation_custom(g_c, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
-  geom_point(size = 5, alpha = 0.5, color = "white") + 
-  geom_path(size = 1, alpha = 0.3) + 
-  geom_text(aes(label = Fixation, size = 5))
-  #VS amp density curve
-ggplot(vs_sac, aes(x = Amplitude, color = SearchType), na.rm = T) +
-  geom_density()
-ggplot(vs_sac, aes(x = Amplitude, color = ParticipantID), na.rm = T) +
-  facet_grid(~SearchType) +
-  geom_density()
-colnames(vs_sac)
