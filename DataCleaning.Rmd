@@ -1,0 +1,279 @@
+---
+title: "Data Cleaning"
+author: "Pernille Berg Lassen"
+date: "25 nov 2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+#Notes: Eyetrial = Trial/Image
+#Reading in the data
+ET_samp = read.csv("df1_sam.csv",header = T)
+
+
+ET_events = read.csv("df1_event.csv", header = T)
+behav_df = read.csv("logfile_1_0A.csv",header = T)
+BehaveDat = read.csv("BehavioralData.csv", header = T)
+temp = list.files(path = "E:/Experiment/Pernille-20181115T161957Z-001/Pernille", pattern = "*_event.csv", full.names = T)
+mixedsort(sort(temp))
+myfiles = lapply(temp,read.delim,sep=",",header = T)
+Events_df=rbindlist(myfiles, fill = T,idcol = "ID")
+
+Events_df = subset(Events_df, select = -c(X))
+Events_df = plyr::rename(Events_df, c(".id"="event","eyetrial"="Eyetrial"))
+
+count = group_by(BehaveDat,ID) %>% summarize(Test=n())
+BehaveDat = merge(count,BehaveDat, by = "ID")
+BehaveDat$Trial = with(BehaveDat,ave(ID,ID,Test, FUN = seq_along))
+BehaveDat = subset(BehaveDat, select = -c(X,Test))
+
+
+#Preppring Fixations df
+Fix_df = subset(Events_df, event == "fixations")
+Fix_df = subset(Fix_df, select = c(ID,event,Eyetrial,sttime,entime,gavx,gavy))
+Fix_df$Duration = Fix_df$entime - Fix_df$sttime
+Fix_df = plyr::rename(Fix_df, c("gavx" = "PositionX","gavy"="PositionY"))
+#Fix_df$Seq = with(Fix_df,ave(Trial,ID,Number_fix, FUN = seq_along))
+#Fix_df$Seq = as.factor(Fix_df$Seq)
+
+Fix_df = plyr::rename(Fix_df, c("Eyetrial" = "Trial"))
+ET_df = plyr::join(BehaveDat,Fix_df)
+
+count = group_by(ET_df,image,ID) %>% summarize(Number_fix=n())
+ET_df = plyr::join(ET_df,count)
+
+#write.csv(ET_df,"FixationsData.csv")
+
+#Prepping Saccades df
+Sac_df = subset(Events_df, event == "saccades")
+Sac_df = subset(Sac_df, select = c(ID,event,Eyetrial,sttime,entime,gstx,gsty,genx,geny,avel,pvel))
+Sac_df$Duration = Sac_df$entime - Sac_df$sttime
+Sac_df = plyr::rename(Sac_df, c("gstx" = "StartPositionX","gsty"="StartPositionY","genx" = "EndPositionX","geny"="EndPositionY"))
+
+Sac_df = plyr::rename(Sac_df, c("Eyetrial" = "Trial"))
+ET_df2 = plyr::join(BehaveDat,Sac_df)
+
+count = group_by(ET_df2,image,ID) %>% summarize(Number_sac=n())
+ET_df2 = plyr::join(ET_df2,count)
+
+#write.csv(ET_df2,"SaccadesData.csv")
+
+###SAVING ALL BEHAVIORAL DATA IN ONE DF - DONE!
+#Cleaning the rating + art interest data - looking at the population
+#temp = list.files(path = "C:/Users/Ejer/Desktop/Bachelor/Experiment/data", pattern = "*.csv", full.names = T)
+#myfiles = lapply(temp,read.delim,sep=",",header = T)
+#Rating_df=rbindlist(myfiles, fill = T)
+
+#temp = list.files(path = "C:/Users/Ejer/Desktop/Bachelor/Experiment/data/questionaire", pattern = "*.csv", full.names = T)
+#myfiles = lapply(temp,read.delim,sep=",",header = T)
+#ArtInt_df=rbindlist(myfiles, fill = T)
+
+#Binding them together
+#temp = select(ArtInt_df,ID,q8,q9,q10,q11)
+#temp_df = subset(Rating_df,select=-c(X,q8,q9,q10,q11))
+#BehavDF = merge(temp_df, temp, all = T)
+#BehavDF = plyr::rename(BehavDF,c("condition" = "group")) 
+#A column which only contains info about whether or not the participant recieived a briefing or not, O = no briefing, 1 = briefing
+#BehavDF$condition = str_extract(BehavDF$group, "\\d")
+
+#Heatmap
+jet.colors = colorRampPalette(c("#00007F", "blue", "#007FFF", "cyan", "#7FFF7F", "yellow", "#FF7F00", "red", "#7F0000"))
+img <- png::readPNG("fig_11.png")
+g <- grid::rasterGrob(img,interpolate = T)
+ggplot(subset(df1_fix, eyetrial==24), aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1920) +
+  ylim(0, 1080) +
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  stat_density2d(geom="raster", aes(fill=..density.., alpha=sqrt(sqrt(..density..))), contour=FALSE, n=1000) +
+scale_alpha(range = c(0.1, 0.6)) + scale_fill_gradientn(colours = jet.colors(10), trans='sqrt') #Not fitting exactly? Need to account for the right size of the image - Ask Fabio
+
+#Scanpath
+ggplot(subset(df1_fix,eyetrial==24), aes(x = PositionX, y = 1081-PositionY)) +
+  xlim(0,1700) +
+  ylim(0, 1000) +
+  annotation_custom(g, xmin=-Inf, xmax=Inf, ymin=-0, ymax=1080) +
+  geom_point(size = 5, alpha = 0.5, color = "white") + 
+  geom_path(size = 1, alpha = 0.3) 
+  #geom_text(aes(label = Fixation, size = 5))
+
+#Downscaling Participant 1 and 3 - wait, is this even necessary? 
+ScaleData = subset(SacDat, ID == 1)
+ScaleData1 = subset(SacDat, ID == 3)
+ScaleData2 = rbind(ScaleData, ScaleData1)
+ScaledData = ScaleData2 %>%
+  group_by(ID, image) %>%
+  groupdata2::group(n = 4, method = 'greedy') %>%
+  summarise(
+    ID = ID[1],
+    age = age[1],
+    gender = gender[1],
+    group = group[1],
+    image = image[1],
+    q1 = q1[1],
+    q2 = q2[1],
+    q3 = q3[1],
+    q4 = q4[1],
+    q5 = q5[1],
+    q6 = q6[1],
+    q7 = q7[1],
+    q8 = q8[1],
+    q9 = q9[1],
+    q10 = q10[1],
+    q11 = q11[1],
+    condition = condition[1],
+    Trial = Trial[1],
+    event = event[1],
+    sttime = (sttime[1]+sttime[2]+sttime[3]+sttime[4])/4,
+    entime = (entime[1]+entime[2]+entime[3]+entime[4])/4,
+    StartPositionX = StartPositionX[1],
+    StartPositionY = StartPositionY[1],
+    EndPositionX = EndPositionX[1],
+    EndPositionY = EndPositionY[1],
+    avel = avel[1],
+    pvel = pvel[1],
+    Duration = Duration[1],
+    Number_sac = Number_sac[1],
+    artist = artist[1],
+    genre = genre[1]
+  )
+
+ScaledData = subset(ScaledData, select = -c(.groups))
+SacDat = SacDat[!(SacDat$ID==1),]
+SacDat = SacDat[!(SacDat$ID==3),]
+SacDat = rbind(SacDat,ScaledData)
+SacDat = SacDat[order(SacDat$ID),]
+
+
+ScaleDataFix = subset(FixDat, ID == 1)
+ScaleDataFix1 = subset(FixDat, ID == 3)
+ScaleDataFix2 = rbind(ScaleDataFix, ScaleDataFix1)
+ScaledDataFix = ScaleDataFix2 %>%
+  group_by(ID, image) %>%
+  groupdata2::group(n = 4, method = 'greedy') %>%
+  summarise(
+    ID = ID[1],
+    age = age[1],
+    gender = gender[1],
+    group = group[1],
+    image = image[1],
+    q1 = q1[1],
+    q2 = q2[1],
+    q3 = q3[1],
+    q4 = q4[1],
+    q5 = q5[1],
+    q6 = q6[1],
+    q7 = q7[1],
+    q8 = q8[1],
+    q9 = q9[1],
+    q10 = q10[1],
+    q11 = q11[1],
+    condition = condition[1],
+    Trial = Trial[1],
+    event = event[1],
+    sttime = (sttime[1]+sttime[2]+sttime[3]+sttime[4])/4,
+    entime = (entime[1]+entime[2]+entime[3]+entime[4])/4,
+    PositionX = PositionX[1],
+    PositionY = PositionY[1],
+    Duration = Duration[1],
+    Number_fix = Number_fix[1],
+    artist = artist[1],
+    genre = genre[1]
+  )
+
+ScaledDataFix = subset(ScaledDataFix, select = -c(.groups))
+FixDat = FixDat[!(FixDat$ID==1),]
+FixDat = FixDat[!(FixDat$ID==3),]
+FixDat = rbind(FixDat,ScaledDataFix)
+FixDat = FixDat[order(FixDat$ID),]
+
+
+```
+
+
+Extra code
+
+df$q1 = as.numeric(df$q1)
+df$q2 = as.numeric(df$q2)
+df$q3 = as.numeric(df$q3)
+df$q4 = as.numeric(df$q4)
+df$q5 = as.numeric(df$q5)
+df$q6 = as.numeric(df$q6)
+df$q8 = as.numeric(df$q8)
+df$q9 = as.numeric(df$q9)
+df$q10 = as.numeric(df$q10)
+
+#Looking at the population:
+summary(df$age)
+summary(df$gender)/40 #The reason female is not a whole number - ID 1 saw only 39 images
+summary(df$q7)/27 #On average, each participants has seen 1.9 image out of 40 - (it's divided by the number of participants)
+summary(df$image[df$q7 == "yes"]) #Most familiar images - so far it's schiele
+length(df$ID[df$q11 == "yes"])/40 #How many people have taken art-classes? - again, not a whole number because of ID 1
+
+Art_interest_df = subset(df, select = c(ID,q8,q9,q10))
+Art_interest_df$Art_IntScore = (Art_interest_df$q8+Art_interest_df$q9+Art_interest_df$q10)/3
+Art_interest_df = aggregate(Art_interest_df,list(Art_interest_df$ID),mean)
+Art_interest_df = subset(Art_interest_df, select = -c(Group.1))
+mean(Art_interest_df$Art_IntScore) #How interested are people in general in art?
+
+#Are the group well-balanced?
+#Getting the mean for rating (understanding and rating) for each image - Basically just looking at condition means
+App_1 = subset(df, condition == 1)
+App_1 = subset(App_1,select=c(image,q1,q2,q3))
+App_1=aggregate(App_1, list(App_1$image),mean)
+App_1$TotalScore_liking = (App_1$q1 + App_1$q2 + App_1$q3)/3
+App_1 = subset(App_1, select = -c(image))
+App_1 = plyr::rename(App_1,c("Group.1" = "image"))
+App_1$condition = 1
+App_1 = subset(App_1, select = -c(q1,q2,q3))
+mean(App_1$TotalScore_liking)
+
+App_0 = subset(df, condition == 0)
+App_0 = subset(App_0,select=c(image,q1,q2,q3))
+App_0 = aggregate(App_0, list(App_0$image),mean)
+App_0$TotalScore_liking = (App_0$q1 + App_0$q2 + App_0$q3)/3
+App_0 = subset(App_0, select = -c(image))
+App_0 = plyr::rename(App_0,c("Group.1" = "image"))
+App_0$condition = 0
+App_0 = subset(App_0, select = -c(q1,q2,q3))
+mean(App_0$TotalScore_liking)
+
+App_df = rbind(App_1,App_0)
+App_df$genre = str_extract(App_df,"")
+App_df$artst = str_extract()
+
+Und_1 = subset(df, condition == 1)
+Und_1 = subset(Und_1, select = c(image, q4,q5,q6))
+Und_1 = aggregate(Und_1,list(Und_1$image),mean)
+Und_1$TotalScore_Understand = (Und_1$q4 + Und_1$q5 + Und_1$q6)/3
+Und_1 = subset(Und_1, select = -c(image))
+Und_1 = plyr::rename(Und_1, c("Group.1" = "image"))
+Und_1$condition = 1
+Und_1 = subset(Und_1, select = -c(q4,q5,q6))
+mean(Und_1$TotalScore_Understand)
+
+Und_0 = subset(df, condition == 0)
+Und_0 = subset(Und_0, select = c(image, q4,q5,q6))
+Und_0 = aggregate(Und_0,list(Und_0$image),mean)
+Und_0$TotalScore_Understand = (Und_0$q4 + Und_0$q5 + Und_0$q6)/3
+Und_0 = subset(Und_0, select = -c(image))
+Und_0 = plyr::rename(Und_0, c("Group.1" = "image"))
+Und_0$condition = 0
+Und_0 = subset(Und_0, select = -c(q4,q5,q6))
+mean(Und_0$TotalScore_Understand)
+
+Und_df = rbind(Und_1,Und_0)
+Und_df$artist = str_extract(Und_df$image, "images\\w+")
+Und_df$artist = gsub("\\images_","",Und_df$artist)
+BehaveDat$artist = str_extract(BehaveDat$image, "images\\w+")
+BehaveDat$artist = gsub("\\images_","",BehaveDat$artist)
+BehaveDat$genre = gsub('.*\\\\w*', '',BehaveDat$image)
+BehaveDat$genre = gsub("\\.png","",BehaveDat$genre)
+BehaveDat$genre = gsub("\\_","",BehaveDat$genre)
+BehaveDat$genre = str_extract(BehaveDat$genre, "\\D+")
+
+
+Und_df$genre = gsub("\\images_","",Und_df$image)
+Und_df$genre =gsub("","",Und_df$artist)

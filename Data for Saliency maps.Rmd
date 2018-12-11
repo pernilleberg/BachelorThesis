@@ -1,0 +1,25 @@
+---
+title: "SaliencyMaps"
+author: "Pernille Berg Lassen"
+date: "4 dec 2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+tempC0 = subset(Fix_df, image == "images_pollock\\abstract_20.png" & ID == 1)
+tempC0 = subset(tempC0, select = c(PositionX, PositionY))
+
+tempC1 = subset(averaged_heatmapsC1, image == "images_pollock\\abstract_20.png")
+tempC1 = subset(tempC1, select = c(PositionX, PositionY))
+
+write.csv(tempC0,"abs_20C0Test.csv")
+write.csv(tempC1,"abs_20C1.csv")
+
+
+
+
+```
+
